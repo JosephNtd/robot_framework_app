@@ -1,100 +1,78 @@
 import sys
 from PyQt5.QtWidgets import QApplication, QTreeView, QWidget, QVBoxLayout, QHBoxLayout, QPushButton
 from PyQt5.QtGui import QStandardItemModel, QStandardItem
-from PyQt5.QtCore import Qt, QProcess
-from robot.api import TestSuiteBuilder
-
-def get_test_cases_name(file_path):
-    suite = TestSuiteBuilder().build(file_path)
-    test_cases = [test.name for test in suite.tests]
-    return test_cases
+from robot_handler import RobotHandler
+from ui_component import ActionButton
 
 class TreeView(QWidget):
-    def __init__(self):
+    def __init__(self, robot_file):
         super().__init__()
+        self.runner = RobotHandler(robot_file)
+        self.processes = []
+
+        self.init_ui()
+        self.build_tree()
+
+    def init_ui(self):
         self.setWindowTitle("Automation test")
         self.resize(400,300)
-
         layout = QVBoxLayout(self)
 
-        self.tree = QTreeView()
-        layout.addWidget(self.tree)
-
+        self.tree = QTreeView() 
         self.model = QStandardItemModel()
         self.model.setHorizontalHeaderLabels(["Test Setting", "Action"])
-
         self.tree.setModel(self.model)
         self.tree.setColumnWidth(0, 250)
         self.tree.setColumnWidth(1, 100)
 
-        self.build_tree()
-        self.tree.expandAll()
+        layout.addWidget(self.tree)
         
-    def build_tree(self):
-        parent = QStandardItem("Test suite")
-        parent.setEditable(False)
+    def add_tree_row(self, parent_item, lable, test_name):
+        item_name = QStandardItem(lable)
+        item_name.setEditable(False)
 
-        parent_action_btn = QStandardItem()
-        self.model.appendRow([parent, parent_action_btn])
+        action_item = QStandardItem()
+        parent_item.appendRow([item_name, action_item])
+        
+        btn_text = "Run All" if test_name is None else "Run"
+        btn_widget = ActionButton(btn_text, lambda: self.execute_test(test_name))
 
-        parent_index = self.model.indexFromItem(parent_action_btn)
-        self.tree.setIndexWidget(
-            parent_index,
-            self.button("Run All", None)
+        self.tree.setIndexWidget(self.model.indexFromItem(action_item), btn_widget)
+
+    def execute_test(self, test_name):
+        proc, cmd = self.runner.run_robot_file(self, test_name)
+        self.processes.append(proc)
+
+        proc.readyReadStandardOutput.connect(
+            lambda p=proc: print(p.readAllStandardOutput().data().decode())
+        )
+        proc.finished.connect(
+        lambda _, p=proc: self.processes.remove(p) if p in self.processes else None
         )
 
-        test_names = get_test_cases_name("test_setting.robot")
+        proc.start("robot", cmd)
+
+    def build_tree(self):
+        root_item = self.model.invisibleRootItem()
+
+        suite_item = QStandardItem("Test Suite")
+        suite_action = QStandardItem()
+        root_item.appendRow([suite_item, suite_action])
+
+        all_btn = ActionButton("Run All", lambda: self.execute_test(None))
+
+        suite_index = self.model.indexFromItem(suite_action)
+        self.tree.setIndexWidget(suite_index, all_btn)
+
+        test_names = self.runner.get_test_cases_name()
 
         for name in test_names:
-            childen = QStandardItem(name)
-            childen.setEditable(False)
+            self.add_tree_row(suite_item, name, name)
 
-            children_action_btn = QStandardItem()
-            parent.appendRow([childen, children_action_btn])
-
-            child_index = self.model.indexFromItem(children_action_btn)
-            self.tree.setIndexWidget(
-                child_index,
-                self.button("Run", name)
-            )
-
-    def button(self, text, test_name):
-        widget = QWidget()
-        layout = QHBoxLayout(widget)
-        layout.setContentsMargins(0, 0, 0, 0)
-
-        btn = QPushButton(text)
-        btn.setFixedWidth(80)
-        btn.clicked.connect(
-            lambda _, t=test_name: self.run_robot_file(t)
-        )
-
-        layout.addWidget(btn)
-        layout.setAlignment(Qt.AlignCenter)
-        return widget
-
-    def run_robot_file(self, test_name=None):
-        cmd = ["robot"]
-
-        if test_name:
-            cmd += ["-t", test_name]
-        
-        cmd.append("test_setting.robot")
-        
-        process = QProcess(self)
-
-        process.readyReadStandardOutput.connect(
-            lambda: print(process.readAllStandardOutput().data().decode())
-        )
-        process.finished.connect(
-            lambda: print(f"Kết thúc: {test_name if test_name else 'All'}")
-        )
-
-        process.start("robot", cmd[1:])
-        
+        self.tree.expandAll()
 
 if __name__ == "__main__":
     app = QApplication(sys.argv)
-    window = TreeView()
+    window = TreeView("test_setting.robot")
     window.show()
     sys.exit(app.exec_())
