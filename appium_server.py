@@ -1,5 +1,6 @@
-import time
 import subprocess
+import requests
+from requests.exceptions import ConnectionError
 
 class AppiumServer():
     def __init__(self):
@@ -22,3 +23,31 @@ class AppiumServer():
             stderr=subprocess.PIPE,
             shell=True,
         )
+
+    def is_appium_server_alive(self, host='127.0.0.1', port=4723):
+        """
+        Checks if the Appium server is alive by sending a status request.
+        
+        Args:
+            host: The Appium server host.
+            port: The Appium server port.
+
+        Returns:
+            True if the server is running and responsive, False otherwise.
+        """
+        url = f"http://{host}:{port}/status"
+
+        try:
+            response = requests.get(url, timeout=5)
+            # Check if the response status code is 200 (OK)
+            if response.status_code == 200:
+                return True
+            else:
+                return False
+        except ConnectionError:
+            # This exception is raised if the server is not reachable
+            return False
+        except requests.exceptions.RequestException as e:
+            # Handle other potential request exceptions
+            print(f"An error occurred while checking Appium server status: {e}")
+            return False

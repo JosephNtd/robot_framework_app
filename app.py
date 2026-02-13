@@ -9,7 +9,7 @@ class TreeView(QWidget):
     def __init__(self, robot_file):
         super().__init__()
         self.appium = AppiumServer()
-        self.appium.start_server()
+        self.check_appium_server()
         self.runner = RobotHandler(robot_file)
         self.event = Event(self)
         self.test_service = TestService(self)
@@ -58,6 +58,13 @@ class TreeView(QWidget):
             suite_item.appendRow([item_name])
 
         self.tree.expandAll()
+    
+    def check_appium_server(self):
+        if self.appium.is_appium_server_alive():
+            print("Appium server is alive and running.")
+        else:
+            print("Appium server is not running or not responsive.")
+            self.appium.start_server()
 
     def closeEvent(self, event):
         self.appium.stop_server()   
