@@ -1,14 +1,18 @@
-import sys
-from PyQt5.QtWidgets import QApplication, QTreeView, QWidget, QVBoxLayout, QHBoxLayout, QPushButton
+from PyQt5.QtWidgets import QTreeView, QWidget, QVBoxLayout, QPushButton
 from PyQt5.QtGui import QStandardItemModel, QStandardItem
 from robot_handler import RobotHandler
-from ui_component import ActionButton
+from event import Event
+from test_service import TestService
+from appium_server import AppiumServer
 
 class TreeView(QWidget):
     def __init__(self, robot_file):
         super().__init__()
+        self.appium = AppiumServer()
+        self.appium.start_server()
         self.runner = RobotHandler(robot_file)
-        self.processes = []
+        self.event = Event(self)
+        self.test_service = TestService(self)
 
         self.init_ui()
         self.build_tree()
@@ -18,61 +22,43 @@ class TreeView(QWidget):
         self.resize(400,300)
         layout = QVBoxLayout(self)
 
-        self.tree = QTreeView() 
+
+        self.tree = QTreeView()
         self.model = QStandardItemModel()
-        self.model.setHorizontalHeaderLabels(["Test Setting", "Action"])
+        self.model.setHorizontalHeaderLabels(["Test Setting"])
         self.tree.setModel(self.model)
         self.tree.setColumnWidth(0, 250)
-        self.tree.setColumnWidth(1, 100)
 
         layout.addWidget(self.tree)
-        
-    def add_tree_row(self, parent_item, lable, test_name):
-        item_name = QStandardItem(lable)
-        item_name.setEditable(False)
 
-        action_item = QStandardItem()
-        parent_item.appendRow([item_name, action_item])
-        
-        btn_text = "Run All" if test_name is None else "Run"
-        btn_widget = ActionButton(btn_text, lambda: self.execute_test(test_name))
+        btn_run_selected = QPushButton("Run Selected Test")
+        btn_run_selected.clicked.connect(self.test_service.run_selected_tests)
+        layout.addWidget(btn_run_selected)
 
-        self.tree.setIndexWidget(self.model.indexFromItem(action_item), btn_widget)
+        self.tree.clicked.connect(self.event.on_clicked_row_tree)
 
-    def execute_test(self, test_name):
-        proc, cmd = self.runner.run_robot_file(self, test_name)
-        self.processes.append(proc)
-
-        proc.readyReadStandardOutput.connect(
-            lambda p=proc: print(p.readAllStandardOutput().data().decode())
-        )
-        proc.finished.connect(
-        lambda _, p=proc: self.processes.remove(p) if p in self.processes else None
-        )
-
-        proc.start("robot", cmd)
+        self.model.itemChanged.connect(self.event.on_item_changed)
 
     def build_tree(self):
         root_item = self.model.invisibleRootItem()
 
         suite_item = QStandardItem("Test Suite")
-        suite_action = QStandardItem()
-        root_item.appendRow([suite_item, suite_action])
+        suite_item.setCheckable(True)
+        suite_item.setEditable(False)
 
-        all_btn = ActionButton("Run All", lambda: self.execute_test(None))
-
-        suite_index = self.model.indexFromItem(suite_action)
-        self.tree.setIndexWidget(suite_index, all_btn)
+        root_item.appendRow([suite_item])
 
         test_names = self.runner.get_test_cases_name()
 
         for name in test_names:
-            self.add_tree_row(suite_item, name, name)
+            item_name = QStandardItem(name)
+            item_name.setCheckable(True)
+            item_name.setEditable(False)
+
+            suite_item.appendRow([item_name])
 
         self.tree.expandAll()
 
-if __name__ == "__main__":
-    app = QApplication(sys.argv)
-    window = TreeView("test_setting.robot")
-    window.show()
-    sys.exit(app.exec_())
+    def closeEvent(self, event):
+        self.appium.stop_server()   
+        event.accept()

@@ -8,6 +8,8 @@ Resource            ${CURDIR}/xpath.resource
 ${ANDROID_AUTOMATION_NAME}      UIAutomator2
 ${ANDROID_PLATFORM_NAME}        Android
 ${ANDROID_PLATFORM_VERSION}     %{ANDROID_PLATFORM_VERSION=13}
+${DEVICE_NAME}                 %{DEVICE_NAME=258e7ccc}
+${UID}                         %{UID=258e7ccc}
 
 *** Keywords ***
 Back To HomeScreen
@@ -43,6 +45,8 @@ Open Test Application
     ...                         automationName=${ANDROID_AUTOMATION_NAME}
     ...                         platformName=${ANDROID_PLATFORM_NAME}
     ...                         platformVersion=${ANDROID_PLATFORM_VERSION}
+    ...                         deviceName=${DEVICE_NAME}
+    ...                         udid=${UID}   
 
 Close Test Application
     Close Application
