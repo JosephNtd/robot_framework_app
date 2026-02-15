@@ -1,9 +1,9 @@
 import sys
 from PyQt5.QtWidgets import QApplication
-from app import TreeView
+from app import AutomationTestApp
 
 if __name__ == "__main__":
     app = QApplication(sys.argv)
-    window = TreeView("test_setting.robot")
+    window = AutomationTestApp(None)
     window.show()
     sys.exit(app.exec_())

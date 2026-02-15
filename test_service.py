@@ -41,6 +41,3 @@ class TestService():
         process.wait()
         if process in self.processes:
             self.processes.remove(process)
-
-        # if not self.processes:
-        #     self.appium_server.stop_server()
