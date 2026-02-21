@@ -1,4 +1,6 @@
-from PyQt5.QtWidgets import QMainWindow, QTreeView, QWidget, QVBoxLayout, QPushButton, QFileDialog
+import threading
+import time
+from PyQt5.QtWidgets import QMainWindow, QTreeView, QWidget, QVBoxLayout, QPushButton, QFileDialog, QProgressBar, QMessageBox
 from PyQt5.QtGui import QStandardItemModel, QStandardItem
 from robot_handler import RobotHandler
 from event import Event
@@ -14,17 +16,20 @@ class AutomationTestApp(QMainWindow):
             self.runner = RobotHandler(robot_file)
 
         self.appium = AppiumServer()
-        self.check_appium_server()
         self.event = Event(self)
         self.test_service = TestService(self)
 
-        
         self.create_app_interface()
-        self.event_handler()
 
     def event_handler(self):
         self.tree.clicked.connect(self.event.on_clicked_row_tree)
         self.model.itemChanged.connect(self.event.on_item_changed)
+
+    def run_server(self):
+        self.progressBar.setValue(0)
+
+        thread = threading.Thread(target=self.appium.start_server)
+        thread.start()
 
     def create_app_interface(self):
         central_widget = QWidget()
@@ -33,15 +38,32 @@ class AutomationTestApp(QMainWindow):
         self.resize(400,300)
 
         layout = QVBoxLayout(central_widget)
-        self.tree = self.create_tree_view()
 
-        btn_run_selected = QPushButton("Run Selected Test")
-        btn_run_selected.clicked.connect(self.test_service.run_selected_tests)
+        self.progressBar = QProgressBar()
+        self.btn_start_appium = QPushButton("Start Appium")
 
-        layout.addWidget(self.tree)
-        layout.addWidget(btn_run_selected)
+        layout.addWidget(self.progressBar)
+        layout.addWidget(self.btn_start_appium)
 
-        self.create_navigation_bar()
+        self.btn_start_appium.clicked.connect(self.run_server)
+        self.appium.progress_signal.connect(self.progressBar.setValue)
+
+        check_appium_flag, information_print = self.check_appium_server()
+        time.sleep(10)
+        if check_appium_flag:
+            print(information_print)
+            self.tree = self.create_tree_view()
+
+            btn_run_selected = QPushButton("Run Selected Test")
+            btn_run_selected.clicked.connect(self.test_service.run_selected_tests)
+
+            layout.addWidget(self.tree)
+            layout.addWidget(btn_run_selected)
+
+            self.create_navigation_bar()
+            self.event_handler()
+        else:
+            print(information_print)
 
     def create_tree_view(self) -> QTreeView:
         self.tree = QTreeView()
@@ -116,12 +138,11 @@ class AutomationTestApp(QMainWindow):
 
         self.tree.expandAll()
 
-    def check_appium_server(self):
+    def check_appium_server(self) -> tuple[bool, str]:
         if self.appium.is_appium_server_alive():
-            print("Appium server is alive and running.")
+            return True, "Appium server is alive and running."
         else:
-            print("Appium server is not running or not responsive.")
-            self.appium.start_server()
+            return False, "Appium server is not running or not responsive."
 
     def closeEvent(self, event):
         self.appium.stop_server()
