@@ -1,9 +1,13 @@
 import subprocess
-from robot.api import TestSuiteBuilder
+from robot.api import TestSuiteBuilder, ExecutionResult
 
 class RobotHandler:
     def __init__(self, file_path):
         self.file_path = file_path
+
+    def get_test_cases_result(self):
+        result = ExecutionResult('report/output.xml')
+        return {t.name: t.status for t in result.suite.all_tests}
 
     def get_test_cases_name(self):
         suite = TestSuiteBuilder().build(self.file_path)

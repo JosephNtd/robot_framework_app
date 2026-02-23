@@ -1,7 +1,7 @@
 import threading
 import time
 from PyQt5.QtWidgets import QMainWindow, QTreeView, QWidget, QVBoxLayout, QPushButton, QFileDialog, QProgressBar, QMessageBox
-from PyQt5.QtGui import QStandardItemModel, QStandardItem
+from PyQt5.QtGui import QStandardItemModel, QStandardItem, QColor
 from robot_handler import RobotHandler
 from event import Event
 from test_service import TestService
@@ -28,7 +28,11 @@ class AutomationTestApp(QMainWindow):
     def run_server(self):
         self.progressBar.setValue(0)
 
-        thread = threading.Thread(target=self.appium.start_server)
+        thread = threading.Thread(
+            target=self.appium.start_server,
+            daemon=True,
+            name='Start appium'
+        )
         thread.start()
 
     def create_app_interface(self):
@@ -37,40 +41,50 @@ class AutomationTestApp(QMainWindow):
         self.setWindowTitle("Automation test")
         self.resize(400,300)
 
-        layout = QVBoxLayout(central_widget)
+        self.layout = QVBoxLayout(central_widget)
 
         self.progressBar = QProgressBar()
         self.btn_start_appium = QPushButton("Start Appium")
 
-        layout.addWidget(self.progressBar)
-        layout.addWidget(self.btn_start_appium)
+        self.layout.addWidget(self.progressBar)
+        self.layout.addWidget(self.btn_start_appium)
 
         self.btn_start_appium.clicked.connect(self.run_server)
         self.appium.progress_signal.connect(self.progressBar.setValue)
+        self.appium.server_started.connect(self.after_connect_server)
 
-        check_appium_flag, information_print = self.check_appium_server()
-        time.sleep(10)
-        if check_appium_flag:
-            print(information_print)
-            self.tree = self.create_tree_view()
+        self.test_service.test_case_waiting.connect(self.update_test_cases_waiting)
+        self.test_service.test_case_started.connect(self.update_test_cases_running)
+        self.test_service.test_case_finished.connect(self.update_test_cases_finished)
+        self.test_service.test_suite_finished.connect(self.update_test_suite_finished)
 
-            btn_run_selected = QPushButton("Run Selected Test")
-            btn_run_selected.clicked.connect(self.test_service.run_selected_tests)
+    def after_connect_server(self):
+        self.layout.removeWidget(self.progressBar)
+        self.layout.removeWidget(self.btn_start_appium)
 
-            layout.addWidget(self.tree)
-            layout.addWidget(btn_run_selected)
+        self.progressBar.deleteLater()
+        self.btn_start_appium.deleteLater()
 
-            self.create_navigation_bar()
-            self.event_handler()
-        else:
-            print(information_print)
+        self.progressBar = None
+        self.btn_start_appium = None
+        
+        self.tree = self.create_tree_view()
+
+        self.btn_run_selected = QPushButton("Run Selected Test")
+        self.btn_run_selected.clicked.connect(self.test_service.run_selected_tests)
+
+        self.layout.addWidget(self.tree)
+        self.layout.addWidget(self.btn_run_selected)
+
+        self.create_navigation_bar()
+        self.event_handler()
 
     def create_tree_view(self) -> QTreeView:
         self.tree = QTreeView()
         self.model = QStandardItemModel()
         self.tree.setModel(self.model)
         self.model.clear()
-        self.model.setHorizontalHeaderLabels(["Test Setting"])
+        self.model.setHorizontalHeaderLabels(["Test Setting", "Status"])
 
         if self.runner:
             root_item = self.model.invisibleRootItem()
@@ -79,7 +93,8 @@ class AutomationTestApp(QMainWindow):
             suite_item.setCheckable(True)
             suite_item.setEditable(False)
 
-            root_item.appendRow([suite_item])
+            suite_status = QStandardItem()
+            root_item.appendRow([suite_item, suite_status])
 
             test_names = self.runner.get_test_cases_name()
 
@@ -88,10 +103,13 @@ class AutomationTestApp(QMainWindow):
                 item_name.setCheckable(True)
                 item_name.setEditable(False)
 
-                suite_item.appendRow([item_name])
+                item_status = QStandardItem()
+                item_status.setEditable(False)
+
+                suite_item.appendRow([item_name, item_status])
 
             self.tree.expandAll()
-
+            self.tree.header().setStretchLastSection(True)
         return self.tree
 
     def create_navigation_bar(self):
@@ -117,7 +135,7 @@ class AutomationTestApp(QMainWindow):
 
     def reload_new_tree(self):
         self.model.clear()
-        self.model.setHorizontalHeaderLabels(["Test Setting"])
+        self.model.setHorizontalHeaderLabels(["Test Setting", "Status"])
 
         root_item = self.model.invisibleRootItem()
 
@@ -125,7 +143,8 @@ class AutomationTestApp(QMainWindow):
         suite_item.setCheckable(True)
         suite_item.setEditable(False)
 
-        root_item.appendRow([suite_item])
+        suite_status = QStandardItem()
+        root_item.appendRow([suite_item, suite_status])
 
         test_names = self.runner.get_test_cases_name()
 
@@ -134,15 +153,62 @@ class AutomationTestApp(QMainWindow):
             item_name.setCheckable(True)
             item_name.setEditable(False)
 
-            suite_item.appendRow([item_name])
+            item_status = QStandardItem()
+            item_status.setEditable(False)
+
+            suite_item.appendRow([item_name, item_status])
 
         self.tree.expandAll()
+        self.tree.header().setStretchLastSection(True)
 
-    def check_appium_server(self) -> tuple[bool, str]:
-        if self.appium.is_appium_server_alive():
-            return True, "Appium server is alive and running."
-        else:
-            return False, "Appium server is not running or not responsive."
+    def update_test_cases_waiting(self, test_name):
+        root_item = self.model.invisibleRootItem()
+        suite_item = root_item.child(0, 0)
+        if not suite_item:
+            return
+
+        for i in range(suite_item.rowCount()):
+            item_name = suite_item.child(i, 0)
+            item_status = suite_item.child(i, 1)
+
+            if item_name.text() == test_name:
+                item_status.setText("Waiting...")
+                item_status.setForeground(QColor("gray"))
+
+    def update_test_cases_running(self, test_name):
+        root_item = self.model.invisibleRootItem()
+        suite_item = root_item.child(0, 0)
+        if not suite_item:
+            return
+
+        for i in range(suite_item.rowCount()):
+            item_name = suite_item.child(i, 0)
+            item_status = suite_item.child(i, 1)
+
+            if item_name.text() == test_name:
+                item_status.setText("Running...")
+                item_status.setForeground(QColor("blue"))
+
+    def update_test_cases_finished(self, test_name, status):
+        root_item = self.model.invisibleRootItem()
+        suite_item = root_item.child(0, 0)
+        if not suite_item:
+            return
+
+        for i in range(suite_item.rowCount()):
+            item_name = suite_item.child(i, 0)
+            item_status = suite_item.child(i, 1)
+
+            if item_name.text() == test_name:
+                item_status.setText(status)
+
+                if status == "PASS":
+                    item_status.setForeground(QColor("green"))
+                elif status == "FAIL":
+                    item_status.setForeground(QColor("red"))
+    
+    def update_test_suite_finished(self):
+        self.btn_run_selected.setEnabled(True)
 
     def closeEvent(self, event):
         self.appium.stop_server()

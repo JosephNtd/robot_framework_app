@@ -1,32 +1,56 @@
 import subprocess
 import requests
+import time
 from PyQt5.QtCore import pyqtSignal, QObject
 from requests.exceptions import ConnectionError
 
 class AppiumServer(QObject):
 
     progress_signal = pyqtSignal(int)
-    
+    server_started = pyqtSignal()
+
     def __init__(self):
         super().__init__()
         self.appium_process = None
 
-    def start_server(self):
-        process = subprocess.Popen(
+    def start_server(self) -> bool:
+        if self.is_appium_server_alive():
+            print("Server already running")
+            self.server_started.emit()
+            return True
+
+        self.appium_process = subprocess.Popen(
             ["cmd", "/c", "appium"],
-            stdout=subprocess.PIPE,
-            stderr=subprocess.STDOUT,
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
             text=True,
             shell=True
         )
 
-        self.progress_signal.emit(30)
+        start_time = time.time()
 
-        for line in process.stdout:
-            print(line.strip())
-            if "listener started" in line.lower():
+        progress = 0
+
+        while progress < 90:
+            progress += 1
+
+            self.progress_signal.emit(progress)
+            time.sleep(0.07)
+
+        while True:
+            if self.is_appium_server_alive():
+                print("Appium server is alive and running.")
                 self.progress_signal.emit(100)
-                break
+                self.server_started.emit()
+                return True
+            
+            if time.time() - start_time > 10:
+                print("Appium server is not running or not responsive.")
+                return False
+
+            
+            time.sleep(0.5)
+
 
     def stop_server(self):
         subprocess.Popen(

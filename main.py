@@ -1,4 +1,5 @@
 import sys
+import time
 from PyQt5.QtWidgets import QApplication
 from app import AutomationTestApp
 
