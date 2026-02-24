@@ -1,25 +1,33 @@
+"""
+Module use to run appium server
+and kill appium server
+"""
 import subprocess
-import requests
 import time
-from PyQt5.QtCore import pyqtSignal, QObject
+import requests
+from PyQt5.QtCore import QObject, pyqtSignal
 from requests.exceptions import ConnectionError
 
 class AppiumServer(QObject):
-
-    progress_signal = pyqtSignal(int)
+    """
+    Handle interaction with appium server
+    """
     server_started = pyqtSignal()
 
-    def __init__(self):
-        super().__init__()
-        self.appium_process = None
-
-    def start_server(self) -> bool:
+    def start_server(self) -> None:
+        """
+        Check appium is running or not
+        Sending signal to update progress bar in UI
+        Create a subprocess to run appium server in cmd
+        """
+        # If appium is already running -> return
         if self.is_appium_server_alive():
             print("Server already running")
             self.server_started.emit()
-            return True
+            return
 
-        self.appium_process = subprocess.Popen(
+        #  If not -> Create a subprocess to run appium server in cmd
+        subprocess.Popen(
             ["cmd", "/c", "appium"],
             stdout=subprocess.DEVNULL,
             stderr=subprocess.DEVNULL,
@@ -27,32 +35,25 @@ class AppiumServer(QObject):
             shell=True
         )
 
+        #  Create time to countdown server started, if exceed 10s -> break
         start_time = time.time()
-
-        progress = 0
-
-        while progress < 90:
-            progress += 1
-
-            self.progress_signal.emit(progress)
-            time.sleep(0.07)
 
         while True:
             if self.is_appium_server_alive():
                 print("Appium server is alive and running.")
-                self.progress_signal.emit(100)
                 self.server_started.emit()
-                return True
-            
+                break
+
             if time.time() - start_time > 10:
                 print("Appium server is not running or not responsive.")
-                return False
-
-            
+                break
             time.sleep(0.5)
 
 
-    def stop_server(self):
+    def stop_server(self) -> None:
+        """
+        Turn off appium server by kill node.exe
+        """
         subprocess.Popen(
             'taskkill /f /im node.exe',
             stdin=subprocess.PIPE,
@@ -61,7 +62,7 @@ class AppiumServer(QObject):
             shell=True,
         )
 
-    def is_appium_server_alive(self, host='127.0.0.1', port=4723):
+    def is_appium_server_alive(self, host='127.0.0.1', port=4723) -> bool:
         """
         Checks if the Appium server is alive by sending a status request.
         
