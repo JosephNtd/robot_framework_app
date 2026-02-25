@@ -4,6 +4,8 @@ Reading the output
 """
 import threading
 from PyQt5.QtCore import Qt, QObject, pyqtSignal
+from robot_listener import QtRobotListener
+from robot import run
 
 class TestService(QObject):
     """
@@ -19,7 +21,7 @@ class TestService(QObject):
     def __init__(self, parent):
         super().__init__()
         self.parent = parent
-        self.processes = []
+        self.current_thread = None
 
     def run_selected_tests(self) -> None:
         """
@@ -34,56 +36,41 @@ class TestService(QObject):
 
         # Get the names from the root parent
         root = self.parent.model.invisibleRootItem()
-        suite_item = root.child(0, 0)
-
-        for i in range(suite_item.rowCount()):
-            test_name_item = suite_item.child(i, 0)
-            if test_name_item.checkState() == Qt.Checked:
-                status, color = self.parent.STATUS_STYLE["WAITING"]
-                self.test_case_waiting.emit(test_name_item.text(), status, color)
-                selected_tests.append(test_name_item.text())
+        self._collect_checked_test(root, selected_tests)
 
         if selected_tests:
             self.parent.btn_run_selected.setEnabled(False)
-            self.execute_test(selected_tests)
+
+            for test_name in selected_tests:
+                status, color = self.parent.STATUS_STYLE["WAITING"]
+                self.test_case_waiting.emit(test_name, status, color)
+
+            self.current_thread = threading.Thread(
+                target=self._run_robot,
+                args=(selected_tests,),
+                daemon=True
+            )
+            self.current_thread.start()
         else:
             print("No tests selected.")
 
-    def execute_test(self, test_names=None):
-        """
-        Excute selected test cases by running run_robot_file() from Appium Server class
-        """
-        process = self.parent.runner.run_robot_file(test_names)
+    def _collect_checked_test(self, item, selected_item):
+        for row in range(item.rowCount()):
+            child = item.child(row, 0)
 
-        self.processes.append(process)
+            if child.rowCount() == 0 and child.checkState() == Qt.Checked:
+                selected_item.append(child.text())
 
-        threading.Thread(
-            target=self.read_process_output,
-            args=(process,),
-            daemon=True
-        ).start()
+            self._collect_checked_test(child, selected_item)
 
-    def read_process_output(self, process):
-        """
-        Read & print the robotframework output process to cmd
-        """
-        for line in process.stdout:
-            print(line.strip())
+    def _run_robot(self, test_names):
+        listener = QtRobotListener(self)
 
-            if "|" not in line and line:
-                status, color = self.parent.STATUS_STYLE["RUNNING"]
-                self.test_case_started.emit(line, status, color)
+        run(
+            self.parent.runner.file_path,
+            test=test_names,
+            outputdir="report",
+            listener=listener
+        )
 
-            if "|" in line and ("PASS" in line or "FAIL" in line):
-                parts = line.split("|")
-                if len(parts) >= 2:
-                    test_name = parts[0].strip()
-                    status = parts[1].strip()
-                    status, color = self.parent.STATUS_STYLE[status]
-                    self.test_case_finished.emit(test_name, status, color)
-        
-        process.wait()
-        if process in self.processes:
-            self.processes.remove(process)
-
-        self.test_suite_finished.emit() # Báo main thread test đã chạy xong
+        self.test_suite_finished.emit()
