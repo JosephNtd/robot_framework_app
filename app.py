@@ -56,8 +56,8 @@ class AutomationTestApp(QMainWindow):
         self.resize(*self.WINDOW_SIZE)
 
         self.main_layout = QVBoxLayout(central_widget)
-        
-        self.main_layout.addLayout(self.init_top_layout())
+
+        self.main_layout.addWidget(self.init_top_layout())
         self.main_layout.addLayout(self.init_bottom_layout())
 
         self.create_navigation_bar()
@@ -77,11 +77,30 @@ class AutomationTestApp(QMainWindow):
 
         return bottom_layout
 
-    def init_top_layout(self) -> QVBoxLayout:
+    def reset_summary(self, total):
+        self.total_count = total
+        self.pass_count = 0
+        self.fail_count = 0
+
+        self.btn_run_selected.setEnabled(False)
+        self.total_test.setText(f"Total Tests: {total}")
+        self.passed_test.setText("Test Passed: 0")
+        self.failed_test.setText("Test Failed: 0")
+
+    def init_top_layout(self) -> QWidget:
         """
         Top layout contain test cases name and test cases status
         """
-        layout = QVBoxLayout()
+        container = QWidget()
+        layout = QVBoxLayout(container)
+        container.setStyleSheet("""
+            QWidget{
+                background-color: #C4AFAF;
+            }
+            QStandardItemModel{
+                background-color: #9E2626
+            }
+        """)
 
         self.tree = self.create_tree_view()
 
@@ -90,7 +109,7 @@ class AutomationTestApp(QMainWindow):
         layout.addWidget(self.tree)
         layout.addWidget(self.btn_run_selected)
 
-        return layout
+        return container
 
     def create_tree_view(self) -> QTreeView:
         """
@@ -134,6 +153,7 @@ class AutomationTestApp(QMainWindow):
 
         for test in suite.tests:
             test_item = QStandardItem(test.name)
+            test_item.setData(test.longname, Qt.UserRole)
             test_item.setCheckable(True)
             test_item.setEditable(False)
 
@@ -163,12 +183,14 @@ class AutomationTestApp(QMainWindow):
         self.tree.clicked.connect(self.event.on_clicked_row_tree)
         self.model.itemChanged.connect(self.event.on_item_changed)
 
-        self.btn_run_selected.clicked.connect(self.test_service.run_selected_tests)
+        self.btn_run_selected.clicked.connect(lambda: self.test_service.run_selected_tests(self.model.invisibleRootItem()))
 
+        self.test_service.test_suite_started.connect(self.reset_summary)
         self.test_service.test_case_waiting.connect(self.update_test_cases_item)
         self.test_service.test_case_started.connect(self.update_test_cases_item)
         self.test_service.test_case_finished.connect(self.update_test_cases_item)
         self.test_service.test_suite_finished.connect(self.update_test_suite_finished)
+    
 
     def create_navigation_bar(self):
         """
@@ -191,7 +213,7 @@ class AutomationTestApp(QMainWindow):
         """
         file_path, _ = QFileDialog.getOpenFileName(
             self,
-            self.DIALOG_TITLE,
+            self.DIALOG_FILE_TITLE,
             "",
             self.FILE_FILTER
         )
@@ -218,24 +240,41 @@ class AutomationTestApp(QMainWindow):
 
     def update_test_cases_item(self, test_name, test_status, color):
         """
-        Update test case status:
-            Waiting:    Test case waiting to be execute
-            Running:    Current test case executing
-            Pass:       Test case that pass
-            Failed:     Test case that failed
-        """
+    Update test case status:
+        Waiting:    Test case waiting to be execute
+        Running:    Current test case executing
+        Pass:       Test case that pass
+        Failed:     Test case that failed
+    """
+        def update_multi_tree(item):
+            for i in range(item.rowCount()):
+                item_name = item.child(i, 0)
+                item_status = item.child(i, 1)
+
+                # Nếu là test case (leaf node)
+                if item_name.rowCount() == 0:
+                    if item_name.data(Qt.UserRole) == test_name:
+                        item_status.setText(test_status)
+                        item_status.setForeground(QColor(color))
+
+                        if test_status == "PASS":
+                            self.pass_count += 1
+                            self.passed_test.setText(f"Test Passed: {self.pass_count}")
+
+                        elif test_status == "FAIL":
+                            self.fail_count += 1
+                            self.failed_test.setText(f"Test Failed: {self.fail_count}")
+
+                        return True  # tìm thấy rồi -> thoát
+                else:
+                    # Nếu là suite -> tìm tiếp bên trong
+                    if update_multi_tree(item_name):
+                        return True
+
+            return False  # chỉ return False sau khi duyệt hết for
+
         root_item = self.model.invisibleRootItem()
-        suite_item = root_item.child(0, 0)
-        if not suite_item:
-            return
-
-        for i in range(suite_item.rowCount()):
-            item_name = suite_item.child(i, 0)
-            item_status = suite_item.child(i, 1)
-
-            if item_name.text() == test_name:
-                item_status.setText(test_status)
-                item_status.setForeground(QColor(color))
+        update_multi_tree(root_item)
 
     def update_test_suite_finished(self):
         """

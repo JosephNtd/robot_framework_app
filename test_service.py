@@ -13,6 +13,7 @@ class TestService(QObject):
     Update test case status to main app
     Get the robotframework ouput
     """
+    test_suite_started = pyqtSignal(int)
     test_case_started = pyqtSignal(str, str, str)
     test_case_waiting = pyqtSignal(str, str, str)
     test_case_finished = pyqtSignal(str, str, str)
@@ -23,7 +24,7 @@ class TestService(QObject):
         self.parent = parent
         self.current_thread = None
 
-    def run_selected_tests(self) -> None:
+    def run_selected_tests(self, root) -> None:
         """
         1. Get the checked test cases name and append it to a list
         2. Send signal Waiting for test case not currently running
@@ -35,11 +36,10 @@ class TestService(QObject):
         selected_tests = []
 
         # Get the names from the root parent
-        root = self.parent.model.invisibleRootItem()
         self._collect_checked_test(root, selected_tests)
 
         if selected_tests:
-            self.parent.btn_run_selected.setEnabled(False)
+            self.test_suite_started.emit(len(selected_tests))
 
             for test_name in selected_tests:
                 status, color = self.parent.STATUS_STYLE["WAITING"]
@@ -59,7 +59,7 @@ class TestService(QObject):
             child = item.child(row, 0)
 
             if child.rowCount() == 0 and child.checkState() == Qt.Checked:
-                selected_item.append(child.text())
+                selected_item.append(child.data(Qt.UserRole))
 
             self._collect_checked_test(child, selected_item)
 
@@ -67,7 +67,7 @@ class TestService(QObject):
         listener = QtRobotListener(self)
 
         run(
-            self.parent.runner.file_path,
+            self.parent.runner.path,
             test=test_names,
             outputdir="report",
             listener=listener
