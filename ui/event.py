@@ -42,7 +42,7 @@ class Event():
         Update check state for parent base on children check state
         if the parent is other children -> update the grand too
         """
-        
+
         #  If the current node is root -> stop
         parent = item.parent()
         if not parent:
@@ -73,7 +73,7 @@ class Event():
         Check the check box when user click the row
         Don't need to specifically click the check box
         """
-        item = self.parent.model.itemFromIndex(index)
+        item = self.parent.top_layout.model.itemFromIndex(index)
         if item and item.isCheckable():
             new_state = Qt.Unchecked if item.checkState() == Qt.Checked else Qt.Checked
             item.setCheckState(new_state)

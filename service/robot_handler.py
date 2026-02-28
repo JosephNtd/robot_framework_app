@@ -15,6 +15,7 @@ class RobotHandler:
         self.path = path
         self.suite = TestSuiteBuilder().build(path)
 
+    @property
     def get_suite(self):
         """
         Get test cases name from robot file to display on app interface

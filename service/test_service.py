@@ -3,9 +3,10 @@ Module to create thread
 Reading the output
 """
 import threading
-from PyQt5.QtCore import Qt, QObject, pyqtSignal
-from robot_listener import QtRobotListener
 from robot import run
+from PyQt5.QtCore import Qt, QObject, pyqtSignal
+from listener.robot_listener import QtRobotListener
+from model.test_status import TestStatus
 
 class TestService(QObject):
     """
@@ -13,16 +14,22 @@ class TestService(QObject):
     Update test case status to main app
     Get the robotframework ouput
     """
-    test_suite_started = pyqtSignal(int)
-    test_case_started = pyqtSignal(str, str, str)
-    test_case_waiting = pyqtSignal(str, str, str)
-    test_case_finished = pyqtSignal(str, str, str)
+    test_suite_started  = pyqtSignal(int)
+    test_case_started   = pyqtSignal(str, str, str)
+    test_case_waiting   = pyqtSignal(str, str, str)
+    test_case_finished  = pyqtSignal(str, str, str)
     test_suite_finished = pyqtSignal()
 
-    def __init__(self, parent):
+    def __init__(self, robot_path: str = None):
         super().__init__()
-        self.parent = parent
+        self.robot_path = robot_path
         self.current_thread = None
+
+    def set_path(self, robot_path):
+        """
+        Update robot file or folder path when select new path.
+        """
+        self.robot_path = robot_path
 
     def run_selected_tests(self, root) -> None:
         """
@@ -42,8 +49,8 @@ class TestService(QObject):
             self.test_suite_started.emit(len(selected_tests))
 
             for test_name in selected_tests:
-                status, color = self.parent.STATUS_STYLE["WAITING"]
-                self.test_case_waiting.emit(test_name, status, color)
+                state = TestStatus.WAITING
+                self.test_case_waiting.emit(test_name, state.status, state.color)
 
             self.current_thread = threading.Thread(
                 target=self._run_robot,
@@ -67,7 +74,7 @@ class TestService(QObject):
         listener = QtRobotListener(self)
 
         run(
-            self.parent.runner.path,
+            self.robot_path,
             test=test_names,
             outputdir="report",
             listener=listener

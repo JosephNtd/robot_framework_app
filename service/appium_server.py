@@ -12,8 +12,10 @@ class AppiumServer(QObject):
     """
     Handle interaction with appium server
     """
-    server_started = pyqtSignal()
-    server_failed = pyqtSignal()
+    APPIUM_ALIVE    = "Appium server is alive and running."
+    APPIUM_FAILED   = "Appium server is not running or not responsive."
+    server_started  = pyqtSignal()
+    server_failed   = pyqtSignal()
 
     def start_server(self) -> None:
         """
@@ -23,7 +25,7 @@ class AppiumServer(QObject):
         """
         # If appium is already running -> return
         if self.is_appium_server_alive():
-            print("Server already running")
+            print(self.APPIUM_ALIVE)
             self.server_started.emit()
             return
 
@@ -41,12 +43,12 @@ class AppiumServer(QObject):
 
         while True:
             if self.is_appium_server_alive():
-                print("Appium server is alive and running.")
+                print(self.APPIUM_ALIVE)
                 self.server_started.emit()
                 break
 
             if time.time() - start_time > 10:
-                print("Appium server is not running or not responsive.")
+                print(self.APPIUM_FAILED)
                 self.server_failed.emit()
                 break
             time.sleep(0.5)

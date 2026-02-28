@@ -1,8 +1,8 @@
 import sys
 from PyQt5.QtWidgets import QApplication
-from app import AutomationTestApp
-from progress_screen import ProgressScreen
-from appium_server import AppiumServer
+from app.app import AutomationTestApp
+from app.progress_screen import ProgressScreen
+from service.appium_server import AppiumServer
 
 if __name__ == "__main__":
     app = QApplication(sys.argv)
