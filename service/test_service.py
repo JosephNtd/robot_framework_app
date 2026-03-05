@@ -42,7 +42,7 @@ class TestService(QObject):
         # Create a list to contain all test cases name
         selected_tests = []
 
-        # Get the names from the root parent
+        # Get the names from the root parent and append into selected_tests[]
         self._collect_checked_test(root, selected_tests)
 
         if selected_tests:
